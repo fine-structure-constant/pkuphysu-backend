@@ -75,8 +75,11 @@ func ListTables() (map[string]map[string]interface{}, error) {
 		tableName := statement.Schema.Table
 
 		info := map[string]interface{}{
-			"exists": false,
-			"rows":   0,
+			"exists":      false,
+			"rows":        0,
+			"model":       statement.Schema.Name,
+			"description": tableDescription(statement.Schema.Name),
+			"columns":     modelColumns(statement),
 		}
 
 		if existingTable[tableName] {
@@ -90,6 +93,38 @@ func ListTables() (map[string]map[string]interface{}, error) {
 		result[tableName] = info
 	}
 	return result, nil
+}
+
+func modelColumns(statement *gorm.Statement) []string {
+	columns := make([]string, 0, len(statement.Schema.Fields))
+	for _, field := range statement.Schema.Fields {
+		if field.DBName != "" {
+			columns = append(columns, field.DBName)
+		}
+	}
+	return columns
+}
+
+func tableDescription(modelName string) string {
+	descriptions := map[string]string{
+		"User":               "用户账户与权限",
+		"EmailVerification":  "邮箱验证码",
+		"ForumPost":          "论坛帖子",
+		"ForumComment":       "论坛评论",
+		"ForumFollow":        "帖子关注关系",
+		"ForumLike":          "帖子点赞关系",
+		"CommentLike":        "评论点赞关系",
+		"ForumTag":           "论坛标签",
+		"ForumPostTag":       "帖子标签关系",
+		"ForumReport":        "论坛举报",
+		"EvepartyInvestment": "活动投资记录",
+		"WechatArticle":      "微信公众号文章",
+		"WechatCookie":       "微信公众号登录 Cookie",
+	}
+	if description, ok := descriptions[modelName]; ok {
+		return description
+	}
+	return modelName
 }
 
 func GetTableData(tableName string) (map[string]interface{}, error) {

@@ -2,6 +2,9 @@ PORT = 8080
 JWT_SECRET = "your-jwt-secret-key"
 TOKEN_EXPIRE = 60
 
+[storage]
+BASE_DIR = "./data/static/files"
+
 [database]
 HOST = "localhost"
 PORT = 5432
@@ -12,8 +15,8 @@ SSL_MODE = "disable"
 TABLE_PREFIX = "pkuphysu_"
 
 [cors]
-ALLOW_ORIGINS = ["http://localhost"]
-ALLOW_METHODS = ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
+ALLOW_ORIGINS = ["http://localhost", "http://localhost:5173", "http://127.0.0.1:5173","http://127.0.0.1:4321","http://localhost:4321"]
+ALLOW_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
 ALLOW_HEADERS = ["Origin", "Content-Type", "Accept", "Authorization"]
 
 [log_config]

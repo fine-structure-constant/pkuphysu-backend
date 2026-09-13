@@ -16,6 +16,9 @@ type UserClaims struct {
 }
 
 func GenerateToken(user *model.User) (tokenString string, err error) {
+	if user.Disabled {
+		return "", errors.New("user account is disabled")
+	}
 	claims := UserClaims{
 		UserID: user.ID,
 		PwdTS:  user.PwdTS,

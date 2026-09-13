@@ -20,10 +20,14 @@ func GenerateRandomString(length int) (string, error) {
 }
 
 func RespondError(c *gin.Context, code int, errid string, err error) {
+	message := errid
+	if err != nil {
+		message = err.Error()
+	}
 	c.JSON(code, gin.H{
 		"status":  code,
 		"errid":   errid,
-		"message": err.Error(),
+		"message": message,
 	})
 }
 

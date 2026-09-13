@@ -1,6 +1,7 @@
 package handles
 
 import (
+	"errors"
 	"strconv"
 	"strings"
 
@@ -55,6 +56,12 @@ func GetPost(c *gin.Context) {
 		"is_like":   isLike,
 		"userid":    post.User.ID,
 		"username":  post.User.Username,
+		"type":      post.Type,
+	}
+	if post.Type == model.ForumPostCanvasV1 {
+		if canvas, decodeErr := utils.DecodeCanvas(post.Content); decodeErr == nil {
+			postData["canvas"] = canvas
+		}
 	}
 
 	utils.RespondSuccess(c, postData)
@@ -64,6 +71,10 @@ func GetPosts(c *gin.Context) {
 	limit, err := strconv.Atoi(c.DefaultQuery("limit", "25"))
 	if err != nil {
 		utils.RespondError(c, 400, "InvalidParam", err)
+		return
+	}
+	if limit < 1 || limit > 100 {
+		utils.RespondError(c, 400, "InvalidParam", errors.New("limit must be between 1 and 100"))
 		return
 	}
 
@@ -171,6 +182,10 @@ func GetComments(c *gin.Context) {
 		utils.RespondError(c, 400, "InvalidLimit", err)
 		return
 	}
+	if limit < 1 || limit > 100 {
+		utils.RespondError(c, 400, "InvalidLimit", errors.New("limit must be between 1 and 100"))
+		return
+	}
 
 	sort := c.DefaultQuery("sort", "asc")
 
@@ -235,6 +250,10 @@ func SubmitComment(c *gin.Context) {
 		utils.RespondError(c, 400, "InvalidParams", err)
 		return
 	}
+	if strings.TrimSpace(req.Text) == "" || len([]byte(req.Text)) > 50*1024 {
+		utils.RespondError(c, 400, "InvalidParams", errors.New("comment must be between 1 byte and 50 KiB"))
+		return
+	}
 
 	currentUser := c.MustGet("CurrentUser").(*model.User)
 
@@ -275,8 +294,10 @@ func SubmitComment(c *gin.Context) {
 
 func SubmitPost(c *gin.Context) {
 	var req struct {
-		Text string   `json:"text"`
-		Tags []string `json:"tags"`
+		Text   string               `json:"text"`
+		Tags   []string             `json:"tags"`
+		Type   int                  `json:"type"`
+		Canvas *utils.CanvasPayload `json:"canvas"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -285,10 +306,40 @@ func SubmitPost(c *gin.Context) {
 	}
 
 	currentUser := c.MustGet("CurrentUser").(*model.User)
+	if req.Type != model.ForumPostMarkdown && req.Type != model.ForumPostCanvasV1 {
+		utils.RespondError(c, 400, "InvalidType", errors.New("unsupported post type"))
+		return
+	}
+	if len(req.Tags) > 8 {
+		utils.RespondError(c, 400, "InvalidTags", errors.New("at most 8 tags are allowed"))
+		return
+	}
+	if req.Type == model.ForumPostMarkdown {
+		if strings.TrimSpace(req.Text) == "" || len([]byte(req.Text)) > 100*1024 {
+			utils.RespondError(c, 400, "InvalidParams", errors.New("post must be between 1 byte and 100 KiB"))
+			return
+		}
+	} else {
+		if req.Canvas == nil {
+			utils.RespondError(c, 400, "InvalidCanvas", errors.New("canvas payload is required"))
+			return
+		}
+		encoded, err := utils.EncodeCanvas(*req.Canvas)
+		if err != nil {
+			utils.RespondError(c, 400, "InvalidCanvas", err)
+			return
+		}
+		req.Text = encoded
+	}
 
 	// 构建tag列表
 	var tags []model.ForumTag
 	for _, tagName := range req.Tags {
+		tagName = strings.TrimSpace(tagName)
+		if len([]rune(tagName)) > 30 {
+			utils.RespondError(c, 400, "InvalidTags", errors.New("tag names must be at most 30 characters"))
+			return
+		}
 		if tagName != "" { // 忽略空tag
 			tags = append(tags, model.ForumTag{Name: tagName})
 		}
@@ -296,6 +347,7 @@ func SubmitPost(c *gin.Context) {
 
 	post := model.ForumPost{
 		Content: req.Text,
+		Type:    req.Type,
 		UserID:  currentUser.ID,
 		Tags:    tags,
 	}
@@ -660,6 +712,12 @@ func GetRawPost(c *gin.Context) {
 		"timestamp": post.CreatedAt.Unix(),
 		"userid":    post.User.ID,
 		"username":  post.User.Username,
+		"type":      post.Type,
+	}
+	if post.Type == model.ForumPostCanvasV1 {
+		if canvas, decodeErr := utils.DecodeCanvas(post.Content); decodeErr == nil {
+			rawData["canvas"] = canvas
+		}
 	}
 
 	utils.RespondSuccess(c, rawData)

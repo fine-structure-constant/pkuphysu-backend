@@ -6,6 +6,11 @@ import (
 	"gorm.io/gorm"
 )
 
+const (
+	ForumPostMarkdown = iota
+	ForumPostCanvasV1
+)
+
 type ForumPost struct {
 	ID          uint `gorm:"primaryKey"`
 	Content     string
@@ -71,6 +76,15 @@ type ForumTag struct {
 }
 
 type ForumPostTag struct {
-	PostID uint `gorm:"primaryKey"`
-	TagID  uint `gorm:"primaryKey"`
+	ForumPostID uint `gorm:"column:forum_post_id;primaryKey"`
+	ForumTagID  uint `gorm:"column:forum_tag_id;primaryKey"`
+}
+
+type ForumReport struct {
+	ID         uint       `json:"id" gorm:"primaryKey"`
+	PostID     uint       `json:"post_id" gorm:"index;not null"`
+	ReporterID uint       `json:"reporter_id" gorm:"index;not null"`
+	Reason     string     `json:"reason" gorm:"type:varchar(500);not null"`
+	CreatedAt  time.Time  `json:"created_at"`
+	ResolvedAt *time.Time `json:"resolved_at"`
 }

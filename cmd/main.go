@@ -16,5 +16,7 @@ func main() {
 
 	server.Init(r)
 
-	r.Run(fmt.Sprintf(":%d", config.Conf.Port))
+	if err := r.Run(fmt.Sprintf(":%d", config.Conf.Port)); err != nil {
+		panic(err)
+	}
 }

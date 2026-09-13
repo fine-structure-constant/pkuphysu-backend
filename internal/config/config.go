@@ -2,6 +2,9 @@ package config
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/spf13/viper"
@@ -10,6 +13,8 @@ import (
 var (
 	Conf *Config
 )
+
+const DefaultFileBaseDir = "./data/static/files"
 
 type Database struct {
 	Host        string `mapstructure:"HOST"`
@@ -51,6 +56,10 @@ type RateLimitConfig struct {
 	BlockDuration     time.Duration `mapstructure:"BLOCK_DURATION"`
 }
 
+type StorageConfig struct {
+	BaseDir string `mapstructure:"BASE_DIR"`
+}
+
 type Config struct {
 	Port        int             `mapstructure:"PORT"`
 	JwtSecret   string          `mapstructure:"JWT_SECRET"`
@@ -60,10 +69,17 @@ type Config struct {
 	Cors        Cors            `mapstructure:"cors"`
 	Email       EmailConfig     `mapstructure:"email"`
 	RateLimit   RateLimitConfig `mapstructure:"rate_limit"`
+	Storage     StorageConfig   `mapstructure:"storage"`
 }
 
 func LoadConfig() (*Config, error) {
-	viper.SetConfigName("config")
+	configName := "config"
+	if environment := os.Getenv("PKUPHYSU_ENV"); environment != "" {
+		configName = "config." + environment
+	} else if _, err := os.Stat(filepath.Join("data", "config", "config.dev.toml")); err == nil {
+		configName = "config.dev"
+	}
+	viper.SetConfigName(configName)
 	viper.SetConfigType("toml")
 
 	viper.AddConfigPath("./data/config")
@@ -79,8 +95,18 @@ func LoadConfig() (*Config, error) {
 	if err := viper.Unmarshal(&cfg); err != nil {
 		return nil, fmt.Errorf("unable to decode config: %w", err)
 	}
+	if strings.TrimSpace(cfg.Storage.BaseDir) == "" {
+		cfg.Storage.BaseDir = DefaultFileBaseDir
+	}
 
 	return &cfg, nil
+}
+
+func FileBaseDir() string {
+	if Conf == nil || strings.TrimSpace(Conf.Storage.BaseDir) == "" {
+		return DefaultFileBaseDir
+	}
+	return Conf.Storage.BaseDir
 }
 
 func InitConfig() {

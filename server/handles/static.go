@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"pkuphysu-backend/internal/config"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -16,6 +17,11 @@ import (
 
 func StaticFile(c *gin.Context) {
 	filename := c.Param("file")
+	baseDir := filepath.Join("data", "static")
+	if filename == "" {
+		filename = c.Param("filename")
+		baseDir = config.FileBaseDir()
+	}
 
 	filename = strings.TrimPrefix(filename, "/static/")
 
@@ -35,7 +41,7 @@ func StaticFile(c *gin.Context) {
 		return
 	}
 
-	filePath := filepath.Join("data", "static", filename)
+	filePath := filepath.Join(baseDir, filename)
 
 	if _, err := os.Stat(filePath); os.IsNotExist(err) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "File not found"})
@@ -83,6 +89,23 @@ func UploadFile(c *gin.Context) {
 	}
 	defer src.Close()
 
+	header := make([]byte, 512)
+	n, readErr := src.Read(header)
+	if readErr != nil && readErr != io.EOF {
+		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "error": "Failed to inspect file"})
+		return
+	}
+	contentType := http.DetectContentType(header[:n])
+	allowed := strings.HasPrefix(contentType, "image/") || contentType == "application/pdf" || contentType == "text/plain; charset=utf-8"
+	if !allowed {
+		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "error": "Only images, PDF and plain text files are allowed"})
+		return
+	}
+	if _, err := src.Seek(0, io.SeekStart); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "error": "Failed to inspect file"})
+		return
+	}
+
 	hasher := md5.New()
 	if _, err := io.Copy(hasher, src); err != nil {
 		log.Errorf("Failed to calculate MD5 hash: %v", err)
@@ -110,7 +133,7 @@ func UploadFile(c *gin.Context) {
 		uniqueFilename = uniqueFilename + "." + fileExtension
 	}
 
-	baseDir := "./data/static/files"
+	baseDir := config.FileBaseDir()
 	err = os.MkdirAll(baseDir, 0755)
 	if err != nil {
 		log.Errorf("Failed to create directory %s: %v", baseDir, err)

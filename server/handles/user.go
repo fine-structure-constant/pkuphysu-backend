@@ -182,8 +182,19 @@ func ListUsers(c *gin.Context) {
 		return
 	}
 
+	current := c.MustGet("CurrentUser").(*model.User)
+	result := make([]gin.H, 0, len(users))
+	for _, user := range users {
+		item := gin.H{"id": user.ID, "username": user.Username, "bio": user.Bio, "role": user.Role, "disabled": user.Disabled}
+		if current.IsAdmin() {
+			item["stuname"] = user.Stuname
+			item["stuid"] = user.Stuid
+			item["verified"] = user.Verified
+		}
+		result = append(result, item)
+	}
 	utils.RespondSuccess(c, gin.H{
-		"users": users,
+		"users": result,
 		"count": len(users),
 	})
 }
@@ -195,8 +206,38 @@ func ListAdmins(c *gin.Context) {
 		return
 	}
 
+	result := make([]gin.H, 0, len(admins))
+	for _, user := range admins {
+		result = append(result, gin.H{"id": user.ID, "username": user.Username, "bio": user.Bio, "role": user.Role})
+	}
 	utils.RespondSuccess(c, gin.H{
-		"admins": admins,
+		"admins": result,
 		"count":  len(admins),
 	})
+}
+
+// DeleteUserByID deletes a user from the administrator console.
+func DeleteUserByID(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		utils.RespondError(c, 400, "invalid_user_id", errors.New("user ID must be a valid number"))
+		return
+	}
+
+	current := c.MustGet("CurrentUser").(*model.User)
+	if current.ID == uint(id) {
+		utils.RespondError(c, 400, "self_delete_forbidden", errors.New("administrators cannot delete their own account"))
+		return
+	}
+
+	if _, err := db.GetUserById(uint(id)); err != nil {
+		utils.RespondError(c, 404, "user_not_found", err)
+		return
+	}
+	if err := db.DeleteUserById(uint(id)); err != nil {
+		utils.RespondError(c, 500, "failed_to_delete_user", err)
+		return
+	}
+
+	utils.RespondSuccess(c, gin.H{"message": "user_deleted_successfully", "id": id})
 }

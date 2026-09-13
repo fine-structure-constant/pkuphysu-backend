@@ -13,7 +13,7 @@ import (
 
 const (
 	GENERAL = iota
-	GUEST   // only one exists
+	MEMBER  // only one exists
 	ADMIN
 )
 
@@ -31,8 +31,8 @@ type User struct {
 	Bio      string `json:"bio"` // user's bio
 }
 
-func (u *User) IsGuest() bool {
-	return u.Role == GUEST
+func (u *User) IsMember() bool {
+	return u.Role == MEMBER
 }
 
 func (u *User) IsAdmin() bool {

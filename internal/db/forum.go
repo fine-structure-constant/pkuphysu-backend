@@ -96,8 +96,18 @@ func CreateForumComment(comment *model.ForumComment) error {
 
 // CreateForumPost 创建帖子
 func CreateForumPost(post *model.ForumPost) error {
-	post.ContentHTML = utils.MarkdownToHtml(post.Content)
-	post.ContentText = utils.MarkdownToText(post.Content)
+	if post.Type == model.ForumPostCanvasV1 {
+		canvas, err := utils.DecodeCanvas(post.Content)
+		if err != nil {
+			return err
+		}
+		post.ContentHTML = utils.MarkdownToHtml(canvas.DescriptionMarkdown)
+		post.ContentText = utils.MarkdownToText(canvas.DescriptionMarkdown)
+	} else {
+		post.Type = model.ForumPostMarkdown
+		post.ContentHTML = utils.MarkdownToHtml(post.Content)
+		post.ContentText = utils.MarkdownToText(post.Content)
+	}
 
 	// 处理标签
 	if len(post.Tags) > 0 {
@@ -300,16 +310,16 @@ func GetPostsByTagNames(tagNames []string, cursor int, limit int) ([]model.Forum
 	}
 
 	dbQuery := db.Preload("User").Preload("Tags").
-		Joins("JOIN forum_post_tags ON forum_posts.id = forum_post_tags.post_id").
-		Joins("JOIN forum_tags ON forum_post_tags.tag_id = forum_tags.id").
-		Where("forum_tags.name IN ?", tagNames)
+		Joins("JOIN pkuphysu_forum_post_tags ON pkuphysu_forum_posts.id = pkuphysu_forum_post_tags.forum_post_id").
+		Joins("JOIN pkuphysu_forum_tags ON pkuphysu_forum_post_tags.forum_tag_id = pkuphysu_forum_tags.id").
+		Where("pkuphysu_forum_tags.name IN ?", tagNames)
 
 	if cursor != 0 {
-		dbQuery = dbQuery.Where("forum_posts.id < ?", cursor)
+		dbQuery = dbQuery.Where("pkuphysu_forum_posts.id < ?", cursor)
 	}
 
 	var posts []model.ForumPost
-	err := dbQuery.Group("forum_posts.id").Order("forum_posts.id DESC").Limit(limit).Find(&posts).Error
+	err := dbQuery.Group("pkuphysu_forum_posts.id").Order("pkuphysu_forum_posts.id DESC").Limit(limit).Find(&posts).Error
 	return posts, err
 }
 
@@ -328,7 +338,7 @@ func DeleteForumPostByID(postID uint) error {
 
 	// 删除帖子的关联数据
 	// 1. 删除帖子与标签的关联
-	if err := tx.Where("post_id = ?", postID).Delete(&model.ForumPostTag{}).Error; err != nil {
+	if err := tx.Where("forum_post_id = ?", postID).Delete(&model.ForumPostTag{}).Error; err != nil {
 		tx.Rollback()
 		return err
 	}
@@ -388,6 +398,14 @@ func DeleteForumCommentByID(commentID uint) error {
 		return err
 	}
 
+	// Load the parent before soft-deleting the comment. GORM excludes deleted
+	// rows from the later query, which previously left reply counts unchanged.
+	var comment model.ForumComment
+	if err := tx.Where("id = ?", commentID).First(&comment).Error; err != nil {
+		tx.Rollback()
+		return err
+	}
+
 	// 1. 删除评论的点赞记录
 	if err := tx.Where("comment_id = ?", commentID).Delete(&model.CommentLike{}).Error; err != nil {
 		tx.Rollback()
@@ -401,13 +419,6 @@ func DeleteForumCommentByID(commentID uint) error {
 	}
 
 	// 3. 更新帖子的回复计数
-	var comment model.ForumComment
-	if err := tx.Where("id = ?", commentID).First(&comment).Error; err != nil {
-		// 如果评论不存在，直接返回成功
-		tx.Rollback()
-		return nil
-	}
-
 	postID := comment.PostID
 	var post model.ForumPost
 	if err := tx.Where("id = ?", postID).First(&post).Error; err != nil {
